@@ -14,6 +14,7 @@ class ParticleApp extends StatelessWidget {
       title: "Flutter web demo by AjaY...",
       home: Scaffold(
         body: ParticleBackgroundPage(),
+        
       ),
     );
   }

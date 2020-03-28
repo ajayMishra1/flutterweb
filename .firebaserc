@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "flutterdemo-5fa58"
+    "release": "flutter-web-view",
+    "default": "flutter-web-view"
   }
 }
