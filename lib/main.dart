@@ -1,113 +1,174 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:simple_animations/simple_animations/animation_progress.dart';
+import 'package:simple_animations/simple_animations/controlled_animation.dart';
+import 'package:simple_animations/simple_animations/multi_track_tween.dart';
+import 'package:simple_animations/simple_animations/rendering.dart';
 
-void main() {
-  runApp(MyApp());
-}
+void main() => runApp(ParticleApp());
 
-class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
+class ParticleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+      home: Scaffold(
+        body: ParticleBackgroundPage(),
       ),
-      home: MyHomePage(title: 'Flutter '),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
+class ParticleBackgroundPage extends StatelessWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(child: AnimatedBackground()),
+        Positioned.fill(child: Particles(30)),
+        Positioned.fill(child: CenteredText()),
+      ],
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class Particles extends StatefulWidget {
+  final int numberOfParticles;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  Particles(this.numberOfParticles);
+
+  @override
+  _ParticlesState createState() => _ParticlesState();
+}
+
+class _ParticlesState extends State<Particles> {
+  final Random random = Random();
+
+  final List<ParticleModel> particles = [];
+
+  @override
+  void initState() {
+    List.generate(widget.numberOfParticles, (index) {
+      particles.add(ParticleModel(random));
     });
+    super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+    return Rendering(
+      startTime: Duration(seconds: 30),
+      onTick: _simulateParticles,
+      builder: (context, time) {
+        return CustomPaint(
+          painter: ParticlePainter(particles, time),
+        );
+      },
+    );
+  }
+
+  _simulateParticles(Duration time) {
+    particles.forEach((particle) => particle.maintainRestart(time));
+  }
+}
+
+class ParticleModel {
+  Animatable tween;
+  double size;
+  AnimationProgress animationProgress;
+  Random random;
+
+  ParticleModel(this.random) {
+    restart();
+  }
+
+  restart({Duration time = Duration.zero}) {
+    final startPosition = Offset(-0.2 + 1.4 * random.nextDouble(), 1.2);
+    final endPosition = Offset(-0.2 + 1.4 * random.nextDouble(), -0.2);
+    final duration = Duration(milliseconds: 3000 + random.nextInt(6000));
+
+    tween = MultiTrackTween([
+      Track("x").add(
+          duration, Tween(begin: startPosition.dx, end: endPosition.dx),
+          curve: Curves.easeInOutSine),
+      Track("y").add(
+          duration, Tween(begin: startPosition.dy, end: endPosition.dy),
+          curve: Curves.easeIn),
+    ]);
+    animationProgress = AnimationProgress(duration: duration, startTime: time);
+    size = 0.2 + random.nextDouble() * 0.4;
+  }
+
+  maintainRestart(Duration time) {
+    if (animationProgress.progress(time) == 1.0) {
+      restart(time: time);
+    }
+  }
+}
+
+class ParticlePainter extends CustomPainter {
+  List<ParticleModel> particles;
+  Duration time;
+
+  ParticlePainter(this.particles, this.time);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withAlpha(50);
+
+    particles.forEach((particle) {
+      var progress = particle.animationProgress.progress(time);
+      final animation = particle.tween.transform(progress);
+      final position =
+          Offset(animation["x"] * size.width, animation["y"] * size.height);
+      canvas.drawCircle(position, size.width * 0.2 * particle.size, paint);
+    });
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
+}
+
+class AnimatedBackground extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final tween = MultiTrackTween([
+      Track("color1").add(Duration(seconds: 3),
+          ColorTween(begin: Color(0xff8a113a), end: Colors.lightBlue.shade900)),
+      Track("color2").add(Duration(seconds: 3),
+          ColorTween(begin: Color(0xff440216), end: Colors.blue.shade600))
+    ]);
+
+    return ControlledAnimation(
+      playback: Playback.MIRROR,
+      tween: tween,
+      duration: tween.duration,
+      builder: (context, animation) {
+        return Container(
+          decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [animation["color1"], animation["color2"]])),
+        );
+      },
+    );
+  }
+}
+
+class CenteredText extends StatelessWidget {
+  const CenteredText({
+    Key key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        "Welcome to Flutter for web",
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w200),
+        textScaleFactor: 4,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You my name is ajay:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
